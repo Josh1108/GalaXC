@@ -353,7 +353,6 @@ class LinearChunk(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-
 class LinearDistributed(nn.Module):
     """Distributed fully connected layer"""
 
@@ -493,7 +492,7 @@ class GalaXCBase(nn.Module):
         self.padding_idx = padding_idx
         self.num_clf_partitions = num_clf_partitions
 
-        self._construct_embeddings(encoder)
+        self._construct_embeddings()
         self.transform1 = self._construct_transform()
         self.transform2 = self._construct_transform()
         self.transform3 = self._construct_transform()
@@ -513,12 +512,12 @@ class GalaXCBase(nn.Module):
         return LinearDistributed(
             self.hidden_dims, self.num_labels, self.device_names)
 
-    def _construct_embeddings(self,encoder):
+    def _construct_embeddings(self):
         """
         Some calculation is repeated. Optimizing doesn't help much, keeping for simplicity.
         """
         def feature_func(features): return features.squeeze(0)
-        if encoder=="GIN":
+        if self.encoder=="GIN":
             self.first_layer_enc = GINEncoder(
                 features=feature_func,
                 query_func=None,
@@ -557,7 +556,7 @@ class GalaXCBase(nn.Module):
                 base_model=self.second_layer_enc,
                 device_name=self.device_name
             )
-        elif encoder=="SAGE":
+        elif self.encoder=="SAGE":
             self.first_layer_enc = SageEncoder(
                 features=feature_func,
                 query_func=None,
@@ -596,7 +595,7 @@ class GalaXCBase(nn.Module):
                 base_model=self.second_layer_enc,
                 device_name=self.device_name
             )
-        elif encoder=="SAINT":
+        elif self.encoder=="SAINT":
              self.first_layer_enc = SaintEncoder(
                 features=feature_func,
                 query_func=None,

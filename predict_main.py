@@ -80,8 +80,7 @@ def update_predicted_shortlist(
     predicted_labels[ind[:, 0], ind[:, 1]] = np.ravel(top_values)
 
 
-def run_validation(val_predicted_labels, tst_X_Y_val,
-                   tst_exact_remove, tst_X_Y_trn, inv_prop,dir):
+def run_validation(val_predicted_labels, tst_X_Y_val, tst_X_Y_trn, inv_prop,dir):
     data = []
     indptr = [0]
     indices = []
@@ -91,8 +90,7 @@ def run_validation(val_predicted_labels, tst_X_Y_val,
 
         _indices, _vals = [], []
         for _ind, _val in zip(_indices1, _vals1):
-            if (_ind not in tst_exact_remove[i]) and (
-                    _ind not in tst_X_Y_trn.indices[tst_X_Y_trn.indptr[i]: tst_X_Y_trn.indptr[i + 1]]):
+            if (_ind not in tst_X_Y_trn.indices[tst_X_Y_trn.indptr[i]: tst_X_Y_trn.indptr[i + 1]]):
                 _indices.append(_ind)
                 _vals.append(_val)
 
@@ -110,14 +108,17 @@ def run_validation(val_predicted_labels, tst_X_Y_val,
     # acc = acc.eval(_pred, 5)
     recall_lis =[]
     prec_lis =[]
+    ndcg_lis =[]
     
     for num in [5,10,20,30,50,100]:
         _rec = recall(tst_X_Y_val, _pred, num,dir)
         recall_lis.append(_rec)
         _prec = precision(tst_X_Y_val,_pred,num,dir)
         prec_lis.append(_prec)
-    
-    return recall_lis,prec_lis
+        _ndcg = ndcg(tst_X_Y_val,_pred,num)
+        ndcg_lis.append(_ndcg)
+    _mrr = mrr(tst_X_Y_val,_pred)
+    return recall_lis,prec_lis, ndcg_lis,_mrr
 
 def encode_nodes(net, context):
     net.eval()
@@ -135,7 +136,7 @@ def encode_nodes(net, context):
     return embed
 
 
-def validate(head_net, params, partition_indices, label_remapping,
+def validate(head_net, params, label_remapping,
              label_embs, tst_point_embs, tst_X_Y_val, tst_exact_remove, tst_X_Y_trn, use_graph_embs, topK,dir):
     _start = params["num_trn"]
     _end = _start + params["num_tst"]
@@ -193,37 +194,30 @@ def validate(head_net, params, partition_indices, label_remapping,
     BATCH_SIZE = 2000000
 
     t1 = time.time()
-    for i in range(len(partition_indices)):
-        print("building ANNS for partition = ", i)
-        label_NGS = HNSW(
-            M=100,
-            efC=300,
-            efS=params["num_shortlist"],
-            num_threads=24)
-        label_NGS.fit(
-            label_features[partition_indices[i][0]: partition_indices[i][1]])
-        print("Done in ", time.time() - t1)
-        t1 = time.time()
+    label_NGS = HNSW(
+        M=100,
+        efC=300,
+        efS=params["num_shortlist"],
+        num_threads=24)
+    label_NGS.fit(label_features)
+    print("Done in ", time.time() - t1)
+    t1 = time.time()
 
-        tst_label_nbrs = np.zeros(
-            (tst_point_features.shape[0],
-             params["num_shortlist"]),
-            dtype=np.int64)
-        for i in range(0, tst_point_features.shape[0], BATCH_SIZE):
-            print(i)
-            _tst_label_nbrs, _ = label_NGS.predict(
-                tst_point_features[i: i + BATCH_SIZE], params["num_shortlist"])
-            tst_label_nbrs[i: i + BATCH_SIZE] = _tst_label_nbrs
+    tst_label_nbrs = np.zeros(
+        (tst_point_features.shape[0],
+         params["num_shortlist"]),
+        dtype=np.int64)
+    for i in range(0, tst_point_features.shape[0], BATCH_SIZE):
+        print(i)
+        _tst_label_nbrs, _ = label_NGS.predict(
+            tst_point_features[i: i + BATCH_SIZE], params["num_shortlist"])
+        tst_label_nbrs[i: i + BATCH_SIZE] = _tst_label_nbrs
 
         prediction_shortlists.append(tst_label_nbrs)
         print("Done in ", time.time() - t1)
         t1 = time.time()
 
-    if(len(partition_indices) == 1):
-        prediction_shortlist = prediction_shortlists[0]
-    else:
-        prediction_shortlist = np.hstack(prediction_shortlists)
-    print(prediction_shortlist.shape)
+    prediction_shortlist = prediction_shortlists[0]
 
     del(prediction_shortlists)
 
@@ -245,13 +239,6 @@ def validate(head_net, params, partition_indices, label_remapping,
     with torch.set_grad_enabled(False):
         for batch_idx, batch_data in enumerate(val_data["val_loader"]):
             val_preds, val_short = predict(head_net, batch_data)
-
-            partition_length = val_short.shape[1] // len(partition_indices)
-            for i in range(1, len(partition_indices)):
-                val_short[:, i *
-                          partition_length: (i +
-                                             1) *
-                          partition_length] += partition_indices[i][0]
 
             update_predicted_shortlist((batch_data["inputs"]) - _start, val_preds,
                                        val_predicted_labels, val_short, None, topK)

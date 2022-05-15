@@ -19,7 +19,7 @@
   "num_HN_shortlist": 20,
   "embedding_type": "New-FT-POS",
   "run_type": "PR",
-  "num_validation": 26000,
+  "num_validation": -1,
   "validation_freq": -1,
   "num_shortlist": 1500,
   "prediction_introduce_edges": 3,

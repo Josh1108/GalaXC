@@ -32,6 +32,7 @@ class Graph():
                 skill = line.replace('\n','')
                 skill_list.append(skill)
         return skill_list
+
     def read_freq_skills(self,path):
         skill_list = []
         with open(path,'r') as f:
